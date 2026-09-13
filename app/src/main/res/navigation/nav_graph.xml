@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/FirstFragment">
+
+    <fragment
+        android:id="@+id/FirstFragment"
+        android:name="com.fun.notifyhelper.FirstFragment"
+        android:label="响铃动作助手"
+        tools:layout="@layout/fragment_first">
+
+        <action
+            android:id="@+id/action_FirstFragment_to_AddEditAlarmFragment"
+            app:destination="@id/AddEditAlarmFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/AddEditAlarmFragment"
+        android:name="com.fun.notifyhelper.AddEditAlarmFragment"
+        android:label="设定响铃动作"
+        tools:layout="@layout/fragment_add_edit_alarm">
+
+        <action
+            android:id="@+id/action_AddEditAlarmFragment_to_AppPickerFragment"
+            app:destination="@id/AppPickerFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/AppPickerFragment"
+        android:name="com.fun.notifyhelper.AppPickerFragment"
+        android:label="选择应用"
+        tools:layout="@layout/fragment_app_picker" />
+
+</navigation>
