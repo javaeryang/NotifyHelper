@@ -16,6 +16,9 @@ import com.fun.notifyhelper.databinding.FragmentAddEditAlarmBinding;
 import com.fun.notifyhelper.model.AlarmAction;
 import com.fun.notifyhelper.receiver.AlarmScheduler;
 import com.fun.notifyhelper.storage.AlarmStorage;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+
+import java.util.Calendar;
 
 public class AddEditAlarmFragment extends Fragment {
 
@@ -26,6 +29,9 @@ public class AddEditAlarmFragment extends Fragment {
     private AlarmAction currentAlarm;
     private String selectedPackageName = "";
     private String selectedAppName = "";
+
+    private int selectedHour = -1;
+    private int selectedMinute = -1;
 
     @Nullable
     @Override
@@ -40,26 +46,44 @@ public class AddEditAlarmFragment extends Fragment {
 
         binding.timePicker.setIs24HourView(true);
 
+        if (savedInstanceState != null) {
+            selectedHour = savedInstanceState.getInt("selectedHour", -1);
+            selectedMinute = savedInstanceState.getInt("selectedMinute", -1);
+            selectedPackageName = savedInstanceState.getString("selectedPackageName", "");
+            selectedAppName = savedInstanceState.getString("selectedAppName", "");
+        }
+
         if (getArguments() != null) {
             alarmId = getArguments().getLong(ARG_ALARM_ID, -1);
         }
 
-        if (alarmId > 0) {
+        if (alarmId > 0 && currentAlarm == null) {
             currentAlarm = AlarmStorage.getInstance(requireContext()).getAlarmById(alarmId);
         }
 
-        if (currentAlarm != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                binding.timePicker.setHour(currentAlarm.getHour());
-                binding.timePicker.setMinute(currentAlarm.getMinute());
+        if (selectedHour == -1) {
+            if (currentAlarm != null) {
+                selectedHour = currentAlarm.getHour();
+                selectedMinute = currentAlarm.getMinute();
+                selectedPackageName = currentAlarm.getPackageName();
+                selectedAppName = currentAlarm.getAppName();
             } else {
-                binding.timePicker.setCurrentHour(currentAlarm.getHour());
-                binding.timePicker.setCurrentMinute(currentAlarm.getMinute());
+                Calendar now = Calendar.getInstance();
+                selectedHour = now.get(Calendar.HOUR_OF_DAY);
+                selectedMinute = now.get(Calendar.MINUTE);
             }
-            binding.etTitle.setText(currentAlarm.getTitle());
-            selectedPackageName = currentAlarm.getPackageName();
-            selectedAppName = currentAlarm.getAppName();
+        }
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            binding.timePicker.setHour(selectedHour);
+            binding.timePicker.setMinute(selectedMinute);
+        } else {
+            binding.timePicker.setCurrentHour(selectedHour);
+            binding.timePicker.setCurrentMinute(selectedMinute);
+        }
+
+        if (currentAlarm != null) {
+            binding.etTitle.setText(currentAlarm.getTitle());
             if (currentAlarm.getActionType() == AlarmAction.ACTION_TYPE_PLAY_AUDIO) {
                 binding.rbActionPlayAudio.setChecked(true);
                 showPlayAudioSection();
@@ -67,10 +91,22 @@ public class AddEditAlarmFragment extends Fragment {
                 binding.rbActionOpenApp.setChecked(true);
                 showOpenAppSection();
             }
+            binding.btnDeleteAlarm.setVisibility(View.VISIBLE);
+            binding.btnDeleteAlarm.setOnClickListener(v -> deleteCurrentAlarm());
         } else {
-            binding.rbActionOpenApp.setChecked(true);
-            showOpenAppSection();
+            binding.btnDeleteAlarm.setVisibility(View.GONE);
+            if (binding.rbActionPlayAudio.isChecked()) {
+                showPlayAudioSection();
+            } else {
+                binding.rbActionOpenApp.setChecked(true);
+                showOpenAppSection();
+            }
         }
+
+        binding.timePicker.setOnTimeChangedListener((view1, hourOfDay, minute) -> {
+            selectedHour = hourOfDay;
+            selectedMinute = minute;
+        });
 
         updateAppDisplay();
 
@@ -82,10 +118,18 @@ public class AddEditAlarmFragment extends Fragment {
             }
         });
 
-        binding.btnSelectApp.setOnClickListener(v ->
-                NavHostFragment.findNavController(AddEditAlarmFragment.this)
-                        .navigate(R.id.action_AddEditAlarmFragment_to_AppPickerFragment)
-        );
+        binding.btnSelectApp.setOnClickListener(v -> {
+            binding.timePicker.clearFocus();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                selectedHour = binding.timePicker.getHour();
+                selectedMinute = binding.timePicker.getMinute();
+            } else {
+                selectedHour = binding.timePicker.getCurrentHour();
+                selectedMinute = binding.timePicker.getCurrentMinute();
+            }
+            NavHostFragment.findNavController(AddEditAlarmFragment.this)
+                    .navigate(R.id.action_AddEditAlarmFragment_to_AppPickerFragment);
+        });
 
         binding.btnSaveAlarm.setOnClickListener(v -> saveAlarm());
 
@@ -98,6 +142,15 @@ public class AddEditAlarmFragment extends Fragment {
                     updateAppDisplay();
                 }
         );
+    }
+
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt("selectedHour", selectedHour);
+        outState.putInt("selectedMinute", selectedMinute);
+        outState.putString("selectedPackageName", selectedPackageName);
+        outState.putString("selectedAppName", selectedAppName);
     }
 
     private void showOpenAppSection() {
@@ -124,7 +177,25 @@ public class AddEditAlarmFragment extends Fragment {
         }
     }
 
+    private void deleteCurrentAlarm() {
+        if (currentAlarm == null) return;
+
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle("确认删除")
+                .setMessage("确定要删除此闹钟动作吗？")
+                .setPositiveButton("删除", (dialog, which) -> {
+                    AlarmScheduler.cancelAlarm(requireContext(), currentAlarm);
+                    AlarmStorage.getInstance(requireContext()).deleteAlarm(currentAlarm.getId());
+                    Toast.makeText(requireContext(), "闹钟已删除", Toast.LENGTH_SHORT).show();
+                    NavHostFragment.findNavController(AddEditAlarmFragment.this).navigateUp();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
     private void saveAlarm() {
+        binding.timePicker.clearFocus();
+
         int actionType = binding.rbActionOpenApp.isChecked() ?
                 AlarmAction.ACTION_TYPE_OPEN_APP : AlarmAction.ACTION_TYPE_PLAY_AUDIO;
 
@@ -166,7 +237,7 @@ public class AddEditAlarmFragment extends Fragment {
         // Schedule new alarm
         AlarmScheduler.scheduleAlarm(requireContext(), alarmToSave);
 
-        Toast.makeText(requireContext(), "闹钟已保存并启用", Toast.LENGTH_SHORT).show();
+        Toast.makeText(requireContext(), "闹钟已保存并启用 (" + alarmToSave.getFormattedTime() + ")", Toast.LENGTH_SHORT).show();
 
         NavHostFragment.findNavController(AddEditAlarmFragment.this).navigateUp();
     }

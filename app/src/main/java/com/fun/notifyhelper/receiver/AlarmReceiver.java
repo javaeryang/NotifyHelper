@@ -7,7 +7,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.media.AudioAttributes;
-import android.media.Ringtone;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
@@ -15,7 +14,7 @@ import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
 
-import com.fun.notifyhelper.MainActivity;
+import com.fun.notifyhelper.AlarmAlertActivity;
 import com.fun.notifyhelper.R;
 import com.fun.notifyhelper.model.AlarmAction;
 import com.fun.notifyhelper.storage.AlarmStorage;
@@ -41,21 +40,14 @@ public class AlarmReceiver extends BroadcastReceiver {
 
         Log.d(TAG, "Executing alarm action: id=" + action.getId() + ", type=" + action.getActionType() + ", app=" + action.getAppName());
 
-        // 1. Show high-priority notification with full-screen intent
+        // 1. Show high-priority notification pointing to AlarmAlertActivity
         showNotificationAndRing(context, action);
 
-        // 2. Execute Action
-        if (action.getActionType() == AlarmAction.ACTION_TYPE_OPEN_APP) {
-            String packageName = action.getPackageName();
-            if (packageName != null && !packageName.isEmpty()) {
-                launchApp(context, packageName);
-            }
-        } else if (action.getActionType() == AlarmAction.ACTION_TYPE_PLAY_AUDIO) {
-            playAudio(context, action.getAudioPath());
-        }
+        // 2. Launch AlarmAlertActivity directly
+        launchAlarmAlertActivity(context, action);
 
-        // 3. Reschedule alarm for next day
-        AlarmScheduler.scheduleAlarm(context, action);
+        // 3. Reschedule alarm for NEXT DAY (prevents re-triggering in same minute)
+        AlarmScheduler.scheduleAlarmForNextDay(context, action);
     }
 
     private void showNotificationAndRing(Context context, AlarmAction action) {
@@ -84,28 +76,21 @@ public class AlarmReceiver extends BroadcastReceiver {
             notificationManager.createNotificationChannel(channel);
         }
 
-        Intent contentIntent = null;
-        if (action.getActionType() == AlarmAction.ACTION_TYPE_OPEN_APP
-                && action.getPackageName() != null && !action.getPackageName().isEmpty()) {
-            contentIntent = context.getPackageManager().getLaunchIntentForPackage(action.getPackageName());
-        }
-
-        if (contentIntent == null) {
-            contentIntent = new Intent(context, MainActivity.class);
-        }
-        contentIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        Intent alertIntent = new Intent(context, AlarmAlertActivity.class);
+        alertIntent.putExtra(AlarmScheduler.EXTRA_ALARM_ID, action.getId());
+        alertIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 context,
                 (int) action.getId(),
-                contentIntent,
+                alertIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
 
         String title = action.getTitle();
         if (title == null || title.isEmpty()) {
             if (action.getActionType() == AlarmAction.ACTION_TYPE_OPEN_APP && action.getAppName() != null && !action.getAppName().isEmpty()) {
-                title = "闹钟响应: 打开 " + action.getAppName();
+                title = "闹钟响铃: 即将打开 " + action.getAppName();
             } else {
                 title = "闹钟响铃 (" + action.getFormattedTime() + ")";
             }
@@ -127,37 +112,15 @@ public class AlarmReceiver extends BroadcastReceiver {
         notificationManager.notify((int) action.getId(), builder.build());
     }
 
-    private void launchApp(Context context, String packageName) {
+    private void launchAlarmAlertActivity(Context context, AlarmAction action) {
         try {
-            Intent launchIntent = context.getPackageManager().getLaunchIntentForPackage(packageName);
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                        | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-                context.startActivity(launchIntent);
-                Log.d(TAG, "Successfully started activity for package: " + packageName);
-            } else {
-                Log.w(TAG, "Launch intent is null for package: " + packageName);
-            }
+            Intent alertIntent = new Intent(context, AlarmAlertActivity.class);
+            alertIntent.putExtra(AlarmScheduler.EXTRA_ALARM_ID, action.getId());
+            alertIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            context.startActivity(alertIntent);
+            Log.d(TAG, "Successfully started AlarmAlertActivity");
         } catch (Exception e) {
-            Log.e(TAG, "Failed to launch app directly from receiver: " + packageName, e);
-        }
-    }
-
-    private void playAudio(Context context, String audioPath) {
-        try {
-            Uri soundUri;
-            if (audioPath != null && !audioPath.isEmpty()) {
-                soundUri = Uri.parse(audioPath);
-            } else {
-                soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-            }
-            Ringtone ringtone = RingtoneManager.getRingtone(context, soundUri);
-            if (ringtone != null) {
-                ringtone.play();
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to play audio", e);
+            Log.e(TAG, "Failed to launch AlarmAlertActivity directly", e);
         }
     }
 }

@@ -149,6 +149,17 @@
             android:text="保存闹钟"
             android:textSize="16sp" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_delete_alarm"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="12dp"
+            android:text="删除此闹钟"
+            android:textColor="#D32F2F"
+            android:visibility="gone"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            tools:visibility="visible" />
+
     </LinearLayout>
 
 </ScrollView>

@@ -38,6 +38,14 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".AlarmAlertActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.NotifyHelper" />
+
         <receiver
             android:name=".receiver.AlarmReceiver"
             android:exported="false" />

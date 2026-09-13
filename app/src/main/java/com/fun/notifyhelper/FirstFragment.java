@@ -29,6 +29,7 @@ import com.fun.notifyhelper.model.AlarmAction;
 import com.fun.notifyhelper.receiver.AlarmScheduler;
 import com.fun.notifyhelper.storage.AlarmStorage;
 import com.fun.notifyhelper.storage.SystemAlarmStorage;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.List;
 
@@ -275,10 +276,22 @@ public class FirstFragment extends Fragment implements AlarmAdapter.OnAlarmActio
 
     @Override
     public void onAlarmDelete(AlarmAction action) {
-        AlarmScheduler.cancelAlarm(requireContext(), action);
-        AlarmStorage.getInstance(requireContext()).deleteAlarm(action.getId());
-        Toast.makeText(requireContext(), "闹钟已删除", Toast.LENGTH_SHORT).show();
-        loadAlarms();
+        if (getContext() == null || action == null) return;
+
+        String timeStr = action.getFormattedTime();
+        String message = "确定要删除 " + (timeStr != null ? "「" + timeStr + "」" : "") + " 的闹钟动作吗？";
+
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle("确认删除")
+                .setMessage(message)
+                .setPositiveButton("删除", (dialog, which) -> {
+                    AlarmScheduler.cancelAlarm(requireContext(), action);
+                    AlarmStorage.getInstance(requireContext()).deleteAlarm(action.getId());
+                    Toast.makeText(requireContext(), "闹钟已删除", Toast.LENGTH_SHORT).show();
+                    loadAlarms();
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     @Override

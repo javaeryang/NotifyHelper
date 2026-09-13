@@ -21,6 +21,14 @@ public class AlarmScheduler {
     public static final String EXTRA_ALARM_ID = "extra_alarm_id";
 
     public static void scheduleAlarm(Context context, AlarmAction action) {
+        scheduleAlarmInternal(context, action, false);
+    }
+
+    public static void scheduleAlarmForNextDay(Context context, AlarmAction action) {
+        scheduleAlarmInternal(context, action, true);
+    }
+
+    private static void scheduleAlarmInternal(Context context, AlarmAction action, boolean forceNextDay) {
         if (action == null || !action.isEnabled()) {
             return;
         }
@@ -50,18 +58,25 @@ public class AlarmScheduler {
         target.set(Calendar.SECOND, 0);
         target.set(Calendar.MILLISECOND, 0);
 
-        long targetMillis = target.getTimeInMillis();
+        long targetMillis;
 
-        if (targetMillis <= nowMillis - 60000) {
-            // Time is earlier than current time today by more than 1 min -> schedule for tomorrow
+        if (forceNextDay) {
+            // Explicitly rescheduling for tomorrow
             target.add(Calendar.DAY_OF_YEAR, 1);
             targetMillis = target.getTimeInMillis();
-        } else if (targetMillis <= nowMillis) {
-            // Time is within current minute (e.g. 10:42 set at 10:42:15) -> trigger in 2 seconds
-            targetMillis = nowMillis + 2000;
+        } else {
+            targetMillis = target.getTimeInMillis();
+            if (targetMillis <= nowMillis - 60000) {
+                // Time is earlier than current time today by more than 1 min -> schedule for tomorrow
+                target.add(Calendar.DAY_OF_YEAR, 1);
+                targetMillis = target.getTimeInMillis();
+            } else if (targetMillis <= nowMillis) {
+                // Time is within current minute (e.g. 10:42 set at 10:42:15) -> trigger in 2 seconds
+                targetMillis = nowMillis + 2000;
+            }
         }
 
-        Log.d(TAG, "Scheduling alarm id=" + action.getId() + " at " + targetMillis + " (in " + ((targetMillis - nowMillis) / 1000) + "s)");
+        Log.d(TAG, "Scheduling alarm id=" + action.getId() + " (forceNextDay=" + forceNextDay + ") at " + targetMillis + " (in " + ((targetMillis - nowMillis) / 1000) + "s)");
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
