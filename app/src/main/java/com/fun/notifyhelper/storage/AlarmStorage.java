@@ -9,6 +9,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class AlarmStorage {
@@ -43,6 +44,11 @@ public class AlarmStorage {
                 e.printStackTrace();
             }
         }
+        Collections.sort(list, (a1, a2) -> {
+            int t1 = a1.getHour() * 60 + a1.getMinute();
+            int t2 = a2.getHour() * 60 + a2.getMinute();
+            return Integer.compare(t1, t2);
+        });
         return list;
     }
 
@@ -84,6 +90,12 @@ public class AlarmStorage {
     }
 
     private void saveAllAlarms(List<AlarmAction> list) {
+        Collections.sort(list, (a1, a2) -> {
+            int t1 = a1.getHour() * 60 + a1.getMinute();
+            int t2 = a2.getHour() * 60 + a2.getMinute();
+            return Integer.compare(t1, t2);
+        });
+
         JSONArray jsonArray = new JSONArray();
         for (AlarmAction action : list) {
             try {
