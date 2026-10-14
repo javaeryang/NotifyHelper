@@ -157,7 +157,7 @@ public class AlarmAlertActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.e(TAG, "Error stopping ringtone/vibration", e);
         }
-        finish();
+        finishAndRemoveTask();
     }
 
     private void launchTargetApp(String packageName) {
@@ -171,6 +171,8 @@ public class AlarmAlertActivity extends AppCompatActivity {
             }
         } catch (Exception e) {
             Log.e(TAG, "Failed to launch target app: " + packageName, e);
+        } finally {
+            finishAndRemoveTask();
         }
     }
 

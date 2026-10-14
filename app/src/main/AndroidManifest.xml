@@ -41,6 +41,7 @@
         <activity
             android:name=".AlarmAlertActivity"
             android:exported="false"
+            android:noHistory="true"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:launchMode="singleTask"

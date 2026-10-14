@@ -78,7 +78,7 @@ public class AlarmReceiver extends BroadcastReceiver {
 
         Intent alertIntent = new Intent(context, AlarmAlertActivity.class);
         alertIntent.putExtra(AlarmScheduler.EXTRA_ALARM_ID, action.getId());
-        alertIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        alertIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NO_HISTORY);
 
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 context,
@@ -116,7 +116,7 @@ public class AlarmReceiver extends BroadcastReceiver {
         try {
             Intent alertIntent = new Intent(context, AlarmAlertActivity.class);
             alertIntent.putExtra(AlarmScheduler.EXTRA_ALARM_ID, action.getId());
-            alertIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            alertIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NO_HISTORY);
             context.startActivity(alertIntent);
             Log.d(TAG, "Successfully started AlarmAlertActivity");
         } catch (Exception e) {
