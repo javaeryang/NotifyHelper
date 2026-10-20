@@ -1,6 +1,7 @@
 package com.fun.notifyhelper.adapter;
 
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
@@ -15,7 +16,7 @@ import java.util.List;
 public class AppAdapter extends RecyclerView.Adapter<AppAdapter.AppViewHolder> {
 
     public interface OnAppClickListener {
-        void onAppClick(AppInfo appInfo);
+        void onAppClick(AppInfo appInfo, int position);
     }
 
     private final List<AppInfo> appList = new ArrayList<>();
@@ -33,6 +34,20 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.AppViewHolder> {
         notifyDataSetChanged();
     }
 
+    public List<AppInfo> getApps() {
+        return appList;
+    }
+
+    public List<AppInfo> getSelectedApps() {
+        List<AppInfo> selected = new ArrayList<>();
+        for (AppInfo app : appList) {
+            if (app.isSelected()) {
+                selected.add(app);
+            }
+        }
+        return selected;
+    }
+
     @NonNull
     @Override
     public AppViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -47,7 +62,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.AppViewHolder> {
     @Override
     public void onBindViewHolder(@NonNull AppViewHolder holder, int position) {
         AppInfo appInfo = appList.get(position);
-        holder.bind(appInfo, listener);
+        holder.bind(appInfo, position, listener);
     }
 
     @Override
@@ -64,14 +79,24 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.AppViewHolder> {
             this.binding = binding;
         }
 
-        public void bind(AppInfo appInfo, OnAppClickListener listener) {
+        public void bind(AppInfo appInfo, int position, OnAppClickListener listener) {
             binding.tvAppName.setText(appInfo.getAppName());
             binding.tvPackageName.setText(appInfo.getPackageName());
             binding.ivAppIcon.setImageDrawable(appInfo.getIcon());
+            binding.checkboxApp.setChecked(appInfo.isSelected());
+
+            if (appInfo.getUserSerialNumber() > 0) {
+                binding.tvUserInfo.setVisibility(View.VISIBLE);
+                binding.tvUserInfo.setText("双开/工作空间 (User " + appInfo.getUserSerialNumber() + ")");
+            } else {
+                binding.tvUserInfo.setVisibility(View.GONE);
+            }
 
             itemView.setOnClickListener(v -> {
+                appInfo.setSelected(!appInfo.isSelected());
+                binding.checkboxApp.setChecked(appInfo.isSelected());
                 if (listener != null) {
-                    listener.onAppClick(appInfo);
+                    listener.onAppClick(appInfo, position);
                 }
             });
         }

@@ -166,6 +166,15 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_test_launch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginTop="8dp"
+        android:text="测试拉起上方设定的系统联动应用"
+        app:backgroundTint="#4CAF50" />
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"

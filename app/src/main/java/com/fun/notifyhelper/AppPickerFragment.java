@@ -1,15 +1,18 @@
 package com.fun.notifyhelper;
 
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
-import android.graphics.drawable.Drawable;
+import android.content.Context;
+import android.content.pm.LauncherActivityInfo;
+import android.content.pm.LauncherApps;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.UserHandle;
+import android.os.UserManager;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -21,6 +24,10 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import com.fun.notifyhelper.adapter.AppAdapter;
 import com.fun.notifyhelper.databinding.FragmentAppPickerBinding;
 import com.fun.notifyhelper.model.AppInfo;
+import com.fun.notifyhelper.model.TargetApp;
+
+import org.json.JSONArray;
+import org.json.JSONException;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,8 +38,7 @@ import java.util.concurrent.Executors;
 public class AppPickerFragment extends Fragment {
 
     public static final String REQUEST_KEY_SELECT_APP = "request_key_select_app";
-    public static final String EXTRA_PACKAGE_NAME = "extra_package_name";
-    public static final String EXTRA_APP_NAME = "extra_app_name";
+    public static final String EXTRA_TARGET_APPS_JSON = "extra_target_apps_json";
 
     private FragmentAppPickerBinding binding;
     private AppAdapter adapter;
@@ -55,13 +61,7 @@ public class AppPickerFragment extends Fragment {
         binding.rvApps.setLayoutManager(new LinearLayoutManager(requireContext()));
         binding.rvApps.setAdapter(adapter);
 
-        adapter.setOnAppClickListener(appInfo -> {
-            Bundle bundle = new Bundle();
-            bundle.putString(EXTRA_PACKAGE_NAME, appInfo.getPackageName());
-            bundle.putString(EXTRA_APP_NAME, appInfo.getAppName());
-            getParentFragmentManager().setFragmentResult(REQUEST_KEY_SELECT_APP, bundle);
-            NavHostFragment.findNavController(AppPickerFragment.this).navigateUp();
-        });
+        adapter.setOnAppClickListener((appInfo, position) -> updateFab());
 
         binding.searchViewApp.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
@@ -77,7 +77,47 @@ public class AppPickerFragment extends Fragment {
             }
         });
 
+        binding.fabConfirmSelection.setOnClickListener(v -> confirmSelection());
+
         loadInstalledApps();
+    }
+
+    private void updateFab() {
+        List<AppInfo> selected = adapter.getSelectedApps();
+        if (selected.isEmpty()) {
+            binding.fabConfirmSelection.setVisibility(View.GONE);
+        } else {
+            binding.fabConfirmSelection.setVisibility(View.VISIBLE);
+            binding.fabConfirmSelection.setText("确认选择 (" + selected.size() + ")");
+        }
+    }
+
+    private void confirmSelection() {
+        List<AppInfo> selected = adapter.getSelectedApps();
+        if (selected.isEmpty()) {
+            Toast.makeText(requireContext(), "请至少选择一个应用", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        JSONArray jsonArray = new JSONArray();
+        for (AppInfo info : selected) {
+            TargetApp targetApp = new TargetApp(
+                    info.getAppName(),
+                    info.getPackageName(),
+                    info.getComponentName(),
+                    info.getUserSerialNumber()
+            );
+            try {
+                jsonArray.put(targetApp.toJSONObject());
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+
+        Bundle bundle = new Bundle();
+        bundle.putString(EXTRA_TARGET_APPS_JSON, jsonArray.toString());
+        getParentFragmentManager().setFragmentResult(REQUEST_KEY_SELECT_APP, bundle);
+        NavHostFragment.findNavController(AppPickerFragment.this).navigateUp();
     }
 
     private void loadInstalledApps() {
@@ -86,29 +126,61 @@ public class AppPickerFragment extends Fragment {
         binding.tvEmpty.setVisibility(View.GONE);
 
         executor.execute(() -> {
-            PackageManager pm = requireContext().getPackageManager();
-            Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
-            mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-
-            List<ResolveInfo> resolveInfos = pm.queryIntentActivities(mainIntent, 0);
             List<AppInfo> apps = new ArrayList<>();
+            Context context = requireContext();
 
-            for (ResolveInfo info : resolveInfos) {
-                if (info.activityInfo == null || info.activityInfo.packageName == null) continue;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                LauncherApps launcherApps = (LauncherApps) context.getSystemService(Context.LAUNCHER_APPS_SERVICE);
+                UserManager userManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
 
-                // Don't list our own app
-                if (info.activityInfo.packageName.equals(requireContext().getPackageName())) {
-                    continue;
+                if (launcherApps != null && userManager != null) {
+                    List<UserHandle> userProfiles = userManager.getUserProfiles();
+                    for (UserHandle profile : userProfiles) {
+                        long serialNumber = userManager.getSerialNumberForUser(profile);
+                        List<LauncherActivityInfo> activityList = launcherApps.getActivityList(null, profile);
+                        for (LauncherActivityInfo info : activityList) {
+                            if (info.getComponentName() != null) {
+                                String pkgName = info.getComponentName().getPackageName();
+                                if (pkgName.equals(context.getPackageName())) {
+                                    continue;
+                                }
+                                String appName = info.getLabel().toString();
+                                String compName = info.getComponentName().flattenToString();
+                                android.graphics.drawable.Drawable icon = info.getIcon(0);
+
+                                apps.add(new AppInfo(appName, pkgName, compName, icon, serialNumber));
+                            }
+                        }
+                    }
                 }
+            } else {
+                // Fallback for pre-Lollipop (no dual apps support natively via LauncherApps easily)
+                android.content.pm.PackageManager pm = context.getPackageManager();
+                android.content.Intent mainIntent = new android.content.Intent(android.content.Intent.ACTION_MAIN, null);
+                mainIntent.addCategory(android.content.Intent.CATEGORY_LAUNCHER);
 
-                String appName = info.loadLabel(pm).toString();
-                String packageName = info.activityInfo.packageName;
-                Drawable icon = info.loadIcon(pm);
+                List<android.content.pm.ResolveInfo> resolveInfos = pm.queryIntentActivities(mainIntent, 0);
+                for (android.content.pm.ResolveInfo info : resolveInfos) {
+                    if (info.activityInfo == null || info.activityInfo.packageName == null) continue;
+                    if (info.activityInfo.packageName.equals(context.getPackageName())) {
+                        continue;
+                    }
+                    String appName = info.loadLabel(pm).toString();
+                    String packageName = info.activityInfo.packageName;
+                    String componentName = new android.content.ComponentName(packageName, info.activityInfo.name).flattenToString();
+                    android.graphics.drawable.Drawable icon = info.loadIcon(pm);
 
-                apps.add(new AppInfo(appName, packageName, icon));
+                    apps.add(new AppInfo(appName, packageName, componentName, icon, 0));
+                }
             }
 
-            Collections.sort(apps, (o1, o2) -> o1.getAppName().compareToIgnoreCase(o2.getAppName()));
+            Collections.sort(apps, (o1, o2) -> {
+                int nameCompare = o1.getAppName().compareToIgnoreCase(o2.getAppName());
+                if (nameCompare == 0) {
+                    return Long.compare(o1.getUserSerialNumber(), o2.getUserSerialNumber());
+                }
+                return nameCompare;
+            });
 
             mainHandler.post(() -> {
                 if (!isAdded() || binding == null) return;
@@ -132,6 +204,7 @@ public class AppPickerFragment extends Fragment {
         if (query == null || query.trim().isEmpty()) {
             adapter.setApps(allApps);
             binding.tvEmpty.setVisibility(allApps.isEmpty() ? View.VISIBLE : View.GONE);
+            updateFab();
             return;
         }
 
@@ -146,6 +219,7 @@ public class AppPickerFragment extends Fragment {
 
         adapter.setApps(filtered);
         binding.tvEmpty.setVisibility(filtered.isEmpty() ? View.VISIBLE : View.GONE);
+        updateFab();
     }
 
     @Override

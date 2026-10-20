@@ -29,7 +29,12 @@ import com.fun.notifyhelper.model.AlarmAction;
 import com.fun.notifyhelper.receiver.AlarmScheduler;
 import com.fun.notifyhelper.storage.AlarmStorage;
 import com.fun.notifyhelper.storage.SystemAlarmStorage;
+import com.fun.notifyhelper.utils.AppLauncherHelper;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.List;
 
@@ -64,6 +69,16 @@ public class FirstFragment extends Fragment implements AlarmAdapter.OnAlarmActio
         binding.rvAlarms.setAdapter(adapter);
 
         binding.btnGrantPermission.setOnClickListener(v -> requestPermissions());
+        
+        binding.btnTestLaunch.setOnClickListener(v -> {
+            String targetAppsJson = SystemAlarmStorage.getInstance(requireContext()).getTargetAppsJson();
+            if (targetAppsJson != null && !targetAppsJson.isEmpty() && !targetAppsJson.equals("[]")) {
+                Toast.makeText(requireContext(), "开始模拟唤起设定的应用...", Toast.LENGTH_SHORT).show();
+                AppLauncherHelper.launchAppsSequentially(requireContext(), targetAppsJson);
+            } else {
+                Toast.makeText(requireContext(), "尚未选择需要联动的系统应用！", Toast.LENGTH_SHORT).show();
+            }
+        });
 
         setupSystemAlarmCard();
 
@@ -73,13 +88,11 @@ public class FirstFragment extends Fragment implements AlarmAdapter.OnAlarmActio
                 (requestKey, result) -> {
                     if (isSelectingForSystemAlarm) {
                         isSelectingForSystemAlarm = false;
-                        String pkgName = result.getString(AppPickerFragment.EXTRA_PACKAGE_NAME, "");
-                        String appName = result.getString(AppPickerFragment.EXTRA_APP_NAME, "");
+                        String targetAppsJson = result.getString(AppPickerFragment.EXTRA_TARGET_APPS_JSON, "[]");
                         SystemAlarmStorage storage = SystemAlarmStorage.getInstance(requireContext());
-                        storage.setTargetPackageName(pkgName);
-                        storage.setTargetAppName(appName);
+                        storage.setTargetAppsJson(targetAppsJson);
                         updateSystemAlarmCardUI();
-                        Toast.makeText(requireContext(), "已设定系统闹钟联动应用: " + appName, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(requireContext(), "已设定系统闹钟联动应用", Toast.LENGTH_SHORT).show();
                     }
                 }
         );
@@ -115,14 +128,29 @@ public class FirstFragment extends Fragment implements AlarmAdapter.OnAlarmActio
         boolean enabled = storage.isEnabled();
 
         binding.layoutSystemAlarmDetails.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        binding.btnTestLaunch.setVisibility(enabled ? View.VISIBLE : View.GONE);
 
         if (enabled) {
-            String appName = storage.getTargetAppName();
-            String pkgName = storage.getTargetPackageName();
-            if (appName != null && !appName.isEmpty()) {
-                binding.tvSystemAlarmApp.setText("响铃时打开: " + appName);
-            } else if (pkgName != null && !pkgName.isEmpty()) {
-                binding.tvSystemAlarmApp.setText("响铃时打开: " + pkgName);
+            String targetAppsJson = storage.getTargetAppsJson();
+            if (targetAppsJson != null && !targetAppsJson.isEmpty() && !targetAppsJson.equals("[]")) {
+                try {
+                    JSONArray array = new JSONArray(targetAppsJson);
+                    int count = array.length();
+                    if (count > 0) {
+                        JSONObject firstApp = array.getJSONObject(0);
+                        String firstAppName = firstApp.optString("appName", "");
+                        if (firstApp.optLong("userSerialNumber", 0) > 0) {
+                            firstAppName += "(双开)";
+                        }
+                        if (count == 1) {
+                            binding.tvSystemAlarmApp.setText("响铃时打开: " + firstAppName);
+                        } else {
+                            binding.tvSystemAlarmApp.setText("响铃时打开: " + firstAppName + " 等 " + count + " 个应用");
+                        }
+                    }
+                } catch (JSONException e) {
+                    binding.tvSystemAlarmApp.setText("响铃时打开: (解析失败)");
+                }
             } else {
                 binding.tvSystemAlarmApp.setText("响铃时打开: 未选择");
             }

@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.util.Log;
 
 import com.fun.notifyhelper.storage.SystemAlarmStorage;
+import com.fun.notifyhelper.utils.AppLauncherHelper;
 
 public class SystemAlarmBroadcastReceiver extends BroadcastReceiver {
 
@@ -22,8 +23,8 @@ public class SystemAlarmBroadcastReceiver extends BroadcastReceiver {
             return;
         }
 
-        String targetPackage = storage.getTargetPackageName();
-        if (targetPackage == null || targetPackage.isEmpty()) {
+        String targetAppsJson = storage.getTargetAppsJson();
+        if (targetAppsJson == null || targetAppsJson.isEmpty() || targetAppsJson.equals("[]")) {
             return;
         }
 
@@ -34,19 +35,7 @@ public class SystemAlarmBroadcastReceiver extends BroadcastReceiver {
         }
         lastTriggerTime = now;
 
-        Log.d(TAG, "System alarm broadcast received: " + intent.getAction() + ", launching target: " + targetPackage);
-
-        try {
-            Intent launchIntent = context.getPackageManager().getLaunchIntentForPackage(targetPackage);
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                        | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-                context.startActivity(launchIntent);
-                Log.d(TAG, "Successfully launched target app: " + targetPackage);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to launch target app from broadcast receiver: " + targetPackage, e);
-        }
+        Log.d(TAG, "System alarm broadcast received: " + intent.getAction() + ", launching targets");
+        AppLauncherHelper.launchAppsSequentially(context.getApplicationContext(), targetAppsJson);
     }
 }

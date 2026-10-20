@@ -18,6 +18,10 @@ import com.fun.notifyhelper.receiver.AlarmScheduler;
 import com.fun.notifyhelper.storage.AlarmStorage;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.util.Calendar;
 
 public class AddEditAlarmFragment extends Fragment {
@@ -27,8 +31,7 @@ public class AddEditAlarmFragment extends Fragment {
     private FragmentAddEditAlarmBinding binding;
     private long alarmId = -1;
     private AlarmAction currentAlarm;
-    private String selectedPackageName = "";
-    private String selectedAppName = "";
+    private String selectedTargetAppsJson = "[]";
 
     private int selectedHour = -1;
     private int selectedMinute = -1;
@@ -49,8 +52,7 @@ public class AddEditAlarmFragment extends Fragment {
         if (savedInstanceState != null) {
             selectedHour = savedInstanceState.getInt("selectedHour", -1);
             selectedMinute = savedInstanceState.getInt("selectedMinute", -1);
-            selectedPackageName = savedInstanceState.getString("selectedPackageName", "");
-            selectedAppName = savedInstanceState.getString("selectedAppName", "");
+            selectedTargetAppsJson = savedInstanceState.getString("selectedTargetAppsJson", "[]");
         }
 
         if (getArguments() != null) {
@@ -65,8 +67,7 @@ public class AddEditAlarmFragment extends Fragment {
             if (currentAlarm != null) {
                 selectedHour = currentAlarm.getHour();
                 selectedMinute = currentAlarm.getMinute();
-                selectedPackageName = currentAlarm.getPackageName();
-                selectedAppName = currentAlarm.getAppName();
+                selectedTargetAppsJson = currentAlarm.getTargetAppsJson();
             } else {
                 Calendar now = Calendar.getInstance();
                 selectedHour = now.get(Calendar.HOUR_OF_DAY);
@@ -137,8 +138,7 @@ public class AddEditAlarmFragment extends Fragment {
                 AppPickerFragment.REQUEST_KEY_SELECT_APP,
                 getViewLifecycleOwner(),
                 (requestKey, result) -> {
-                    selectedPackageName = result.getString(AppPickerFragment.EXTRA_PACKAGE_NAME, "");
-                    selectedAppName = result.getString(AppPickerFragment.EXTRA_APP_NAME, "");
+                    selectedTargetAppsJson = result.getString(AppPickerFragment.EXTRA_TARGET_APPS_JSON, "[]");
                     updateAppDisplay();
                 }
         );
@@ -149,8 +149,7 @@ public class AddEditAlarmFragment extends Fragment {
         super.onSaveInstanceState(outState);
         outState.putInt("selectedHour", selectedHour);
         outState.putInt("selectedMinute", selectedMinute);
-        outState.putString("selectedPackageName", selectedPackageName);
-        outState.putString("selectedAppName", selectedAppName);
+        outState.putString("selectedTargetAppsJson", selectedTargetAppsJson);
     }
 
     private void showOpenAppSection() {
@@ -164,17 +163,31 @@ public class AddEditAlarmFragment extends Fragment {
     }
 
     private void updateAppDisplay() {
-        if (selectedAppName != null && !selectedAppName.isEmpty()) {
-            binding.tvSelectedAppName.setText(selectedAppName);
-        } else {
-            binding.tvSelectedAppName.setText("未选择应用");
+        if (selectedTargetAppsJson != null && !selectedTargetAppsJson.isEmpty() && !selectedTargetAppsJson.equals("[]")) {
+            try {
+                JSONArray array = new JSONArray(selectedTargetAppsJson);
+                int count = array.length();
+                if (count > 0) {
+                    JSONObject firstApp = array.getJSONObject(0);
+                    String firstAppName = firstApp.optString("appName", "");
+                    if (firstApp.optLong("userSerialNumber", 0) > 0) {
+                        firstAppName += "(双开)";
+                    }
+                    if (count == 1) {
+                        binding.tvSelectedAppName.setText(firstAppName);
+                        binding.tvSelectedPackageName.setText("包名: " + firstApp.optString("packageName", ""));
+                    } else {
+                        binding.tvSelectedAppName.setText(firstAppName + " 等 " + count + " 个应用");
+                        binding.tvSelectedPackageName.setText("将在响铃时顺次打开");
+                    }
+                    return;
+                }
+            } catch (JSONException e) {
+                // ignore
+            }
         }
-
-        if (selectedPackageName != null && !selectedPackageName.isEmpty()) {
-            binding.tvSelectedPackageName.setText("包名: " + selectedPackageName);
-        } else {
-            binding.tvSelectedPackageName.setText("包名: -");
-        }
+        binding.tvSelectedAppName.setText("未选择应用");
+        binding.tvSelectedPackageName.setText("包名: -");
     }
 
     private void deleteCurrentAlarm() {
@@ -200,7 +213,7 @@ public class AddEditAlarmFragment extends Fragment {
                 AlarmAction.ACTION_TYPE_OPEN_APP : AlarmAction.ACTION_TYPE_PLAY_AUDIO;
 
         if (actionType == AlarmAction.ACTION_TYPE_OPEN_APP &&
-                (selectedPackageName == null || selectedPackageName.isEmpty())) {
+                (selectedTargetAppsJson == null || selectedTargetAppsJson.equals("[]"))) {
             Toast.makeText(requireContext(), "请选取需要打开的目标应用", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -223,8 +236,7 @@ public class AddEditAlarmFragment extends Fragment {
         alarmToSave.setMinute(minute);
         alarmToSave.setEnabled(true);
         alarmToSave.setActionType(actionType);
-        alarmToSave.setPackageName(selectedPackageName);
-        alarmToSave.setAppName(selectedAppName);
+        alarmToSave.setTargetAppsJson(selectedTargetAppsJson);
 
         // Cancel existing scheduled alarm if editing
         if (currentAlarm != null) {

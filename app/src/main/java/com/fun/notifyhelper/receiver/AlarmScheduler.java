@@ -83,16 +83,7 @@ public class AlarmScheduler {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
                     alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, targetMillis, pendingIntent);
                 } else {
-                    Intent showIntent;
-                    if (action.getActionType() == AlarmAction.ACTION_TYPE_OPEN_APP
-                            && action.getPackageName() != null && !action.getPackageName().isEmpty()) {
-                        showIntent = context.getPackageManager().getLaunchIntentForPackage(action.getPackageName());
-                    } else {
-                        showIntent = new Intent(context, MainActivity.class);
-                    }
-                    if (showIntent == null) {
-                        showIntent = new Intent(context, MainActivity.class);
-                    }
+                    Intent showIntent = new Intent(context, MainActivity.class);
                     showIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
                     PendingIntent showPendingIntent = PendingIntent.getActivity(context, requestCode, showIntent, flags);
 

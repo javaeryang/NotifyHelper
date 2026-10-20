@@ -1,12 +1,12 @@
 package com.fun.notifyhelper.service;
 
 import android.app.Notification;
-import android.content.Intent;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
 
 import com.fun.notifyhelper.storage.SystemAlarmStorage;
+import com.fun.notifyhelper.utils.AppLauncherHelper;
 
 import java.util.Arrays;
 import java.util.List;
@@ -41,8 +41,8 @@ public class SystemAlarmNotificationListener extends NotificationListenerService
             return;
         }
 
-        String targetPackage = storage.getTargetPackageName();
-        if (targetPackage == null || targetPackage.isEmpty()) {
+        String targetAppsJson = storage.getTargetAppsJson();
+        if (targetAppsJson == null || targetAppsJson.isEmpty() || targetAppsJson.equals("[]")) {
             return;
         }
 
@@ -63,9 +63,7 @@ public class SystemAlarmNotificationListener extends NotificationListenerService
 
         // 2. Clock package check
         if (!isAlarm && KNOWN_CLOCK_PACKAGES.contains(pkgName.toLowerCase())) {
-            if (sbn.isOngoing() || notification.priority >= Notification.PRIORITY_HIGH) {
-                isAlarm = true;
-            }
+            isAlarm = true; // Broaden detection for clocks
         }
 
         if (isAlarm) {
@@ -76,25 +74,8 @@ public class SystemAlarmNotificationListener extends NotificationListenerService
             }
             lastTriggerTime = now;
 
-            Log.d(TAG, "System alarm notification detected from package: " + pkgName + ", launching target: " + targetPackage);
-            launchTargetApp(targetPackage);
-        }
-    }
-
-    private void launchTargetApp(String packageName) {
-        try {
-            Intent launchIntent = getPackageManager().getLaunchIntentForPackage(packageName);
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                        | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-                startActivity(launchIntent);
-                Log.d(TAG, "Successfully launched target app: " + packageName);
-            } else {
-                Log.w(TAG, "Launch intent is null for package: " + packageName);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to launch target app from listener: " + packageName, e);
+            Log.d(TAG, "System alarm notification detected from package: " + pkgName + ", launching targets");
+            AppLauncherHelper.launchAppsSequentially(getApplicationContext(), targetAppsJson);
         }
     }
 }

@@ -38,7 +38,7 @@ public class AlarmReceiver extends BroadcastReceiver {
             return;
         }
 
-        Log.d(TAG, "Executing alarm action: id=" + action.getId() + ", type=" + action.getActionType() + ", app=" + action.getAppName());
+        Log.d(TAG, "Executing alarm action: id=" + action.getId() + ", type=" + action.getActionType() + ", targets=" + action.getTargetAppsJson());
 
         // 1. Show high-priority notification pointing to AlarmAlertActivity
         showNotificationAndRing(context, action);
@@ -89,11 +89,7 @@ public class AlarmReceiver extends BroadcastReceiver {
 
         String title = action.getTitle();
         if (title == null || title.isEmpty()) {
-            if (action.getActionType() == AlarmAction.ACTION_TYPE_OPEN_APP && action.getAppName() != null && !action.getAppName().isEmpty()) {
-                title = "闹钟响铃: 即将打开 " + action.getAppName();
-            } else {
-                title = "闹钟响铃 (" + action.getFormattedTime() + ")";
-            }
+            title = "闹钟响铃 (" + action.getFormattedTime() + ")";
         }
         String content = action.getActionDescription();
 

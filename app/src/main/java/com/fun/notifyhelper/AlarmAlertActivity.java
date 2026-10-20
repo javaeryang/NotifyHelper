@@ -3,7 +3,6 @@ package com.fun.notifyhelper;
 import android.app.KeyguardManager;
 import android.app.NotificationManager;
 import android.content.Context;
-import android.content.Intent;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -21,6 +20,7 @@ import com.fun.notifyhelper.databinding.ActivityAlarmAlertBinding;
 import com.fun.notifyhelper.model.AlarmAction;
 import com.fun.notifyhelper.receiver.AlarmScheduler;
 import com.fun.notifyhelper.storage.AlarmStorage;
+import com.fun.notifyhelper.utils.AppLauncherHelper;
 
 public class AlarmAlertActivity extends AppCompatActivity {
 
@@ -55,9 +55,9 @@ public class AlarmAlertActivity extends AppCompatActivity {
     private void dismissAndExecute() {
         stopAndDismiss();
         if (alarmAction != null && alarmAction.getActionType() == AlarmAction.ACTION_TYPE_OPEN_APP) {
-            String pkgName = alarmAction.getPackageName();
-            if (pkgName != null && !pkgName.isEmpty()) {
-                launchTargetApp(pkgName);
+            String targetAppsJson = alarmAction.getTargetAppsJson();
+            if (targetAppsJson != null && !targetAppsJson.isEmpty() && !targetAppsJson.equals("[]")) {
+                AppLauncherHelper.launchAppsSequentially(getApplicationContext(), targetAppsJson);
             }
         }
     }
@@ -93,15 +93,14 @@ public class AlarmAlertActivity extends AppCompatActivity {
 
             binding.tvAlarmActionDesc.setText(alarmAction.getActionDescription());
 
-            if (alarmAction.getActionType() == AlarmAction.ACTION_TYPE_OPEN_APP
-                    && alarmAction.getPackageName() != null && !alarmAction.getPackageName().isEmpty()) {
-                String appName = alarmAction.getAppName();
-                if (appName != null && !appName.isEmpty()) {
-                    binding.btnExecuteAction.setText("打开 " + appName);
+            if (alarmAction.getActionType() == AlarmAction.ACTION_TYPE_OPEN_APP) {
+                String targetAppsJson = alarmAction.getTargetAppsJson();
+                if (targetAppsJson != null && !targetAppsJson.isEmpty() && !targetAppsJson.equals("[]")) {
+                    binding.btnExecuteAction.setText("立即执行动作 (打开应用)");
+                    binding.btnExecuteAction.setVisibility(View.VISIBLE);
                 } else {
-                    binding.btnExecuteAction.setText("打开目标应用");
+                    binding.btnExecuteAction.setVisibility(View.GONE);
                 }
-                binding.btnExecuteAction.setVisibility(View.VISIBLE);
             } else {
                 binding.btnExecuteAction.setVisibility(View.GONE);
             }
@@ -157,22 +156,10 @@ public class AlarmAlertActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.e(TAG, "Error stopping ringtone/vibration", e);
         }
-        finishAndRemoveTask();
-    }
-
-    private void launchTargetApp(String packageName) {
-        try {
-            Intent launchIntent = getPackageManager().getLaunchIntentForPackage(packageName);
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                        | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-                startActivity(launchIntent);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to launch target app: " + packageName, e);
-        } finally {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             finishAndRemoveTask();
+        } else {
+            finish();
         }
     }
 
