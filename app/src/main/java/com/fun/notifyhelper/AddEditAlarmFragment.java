@@ -85,6 +85,16 @@ public class AddEditAlarmFragment extends Fragment {
 
         if (currentAlarm != null) {
             binding.etTitle.setText(currentAlarm.getTitle());
+            binding.switchRandom.setChecked(currentAlarm.isRandom());
+            if (currentAlarm.isRandom()) {
+                binding.layoutRandomInputs.setVisibility(View.VISIBLE);
+                binding.etRandomMin.setText(String.valueOf(currentAlarm.getRandomMinMinutes()));
+                binding.etRandomMax.setText(String.valueOf(currentAlarm.getRandomMaxMinutes()));
+            } else {
+                binding.layoutRandomInputs.setVisibility(View.GONE);
+                binding.etRandomMin.setText("5");
+                binding.etRandomMax.setText("30");
+            }
             if (currentAlarm.getActionType() == AlarmAction.ACTION_TYPE_PLAY_AUDIO) {
                 binding.rbActionPlayAudio.setChecked(true);
                 showPlayAudioSection();
@@ -96,6 +106,10 @@ public class AddEditAlarmFragment extends Fragment {
             binding.btnDeleteAlarm.setOnClickListener(v -> deleteCurrentAlarm());
         } else {
             binding.btnDeleteAlarm.setVisibility(View.GONE);
+            binding.switchRandom.setChecked(false);
+            binding.layoutRandomInputs.setVisibility(View.GONE);
+            binding.etRandomMin.setText("5");
+            binding.etRandomMax.setText("30");
             if (binding.rbActionPlayAudio.isChecked()) {
                 showPlayAudioSection();
             } else {
@@ -103,6 +117,10 @@ public class AddEditAlarmFragment extends Fragment {
                 showOpenAppSection();
             }
         }
+
+        binding.switchRandom.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            binding.layoutRandomInputs.setVisibility(isChecked ? View.VISIBLE : View.GONE);
+        });
 
         binding.timePicker.setOnTimeChangedListener((view1, hourOfDay, minute) -> {
             selectedHour = hourOfDay;
@@ -208,6 +226,8 @@ public class AddEditAlarmFragment extends Fragment {
 
     private void saveAlarm() {
         binding.timePicker.clearFocus();
+        if (binding.etRandomMin.hasFocus()) binding.etRandomMin.clearFocus();
+        if (binding.etRandomMax.hasFocus()) binding.etRandomMax.clearFocus();
 
         int actionType = binding.rbActionOpenApp.isChecked() ?
                 AlarmAction.ACTION_TYPE_OPEN_APP : AlarmAction.ACTION_TYPE_PLAY_AUDIO;
@@ -216,6 +236,32 @@ public class AddEditAlarmFragment extends Fragment {
                 (selectedTargetAppsJson == null || selectedTargetAppsJson.equals("[]"))) {
             Toast.makeText(requireContext(), "请选取需要打开的目标应用", Toast.LENGTH_SHORT).show();
             return;
+        }
+        
+        boolean isRandom = binding.switchRandom.isChecked();
+        int minRandom = 5;
+        int maxRandom = 30;
+        
+        if (isRandom) {
+            String minStr = binding.etRandomMin.getText() != null ? binding.etRandomMin.getText().toString().trim() : "";
+            String maxStr = binding.etRandomMax.getText() != null ? binding.etRandomMax.getText().toString().trim() : "";
+            
+            try {
+                minRandom = Integer.parseInt(minStr);
+                maxRandom = Integer.parseInt(maxStr);
+            } catch (NumberFormatException e) {
+                Toast.makeText(requireContext(), "请输入有效的随机间隔数字", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            
+            if (minRandom <= 0) {
+                Toast.makeText(requireContext(), "最小间隔必须大于0分钟", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            if (maxRandom < minRandom) {
+                Toast.makeText(requireContext(), "最大间隔不能小于最小间隔", Toast.LENGTH_SHORT).show();
+                return;
+            }
         }
 
         int hour;
@@ -234,9 +280,14 @@ public class AddEditAlarmFragment extends Fragment {
         alarmToSave.setTitle(title);
         alarmToSave.setHour(hour);
         alarmToSave.setMinute(minute);
+        alarmToSave.setBaseHour(hour);
+        alarmToSave.setBaseMinute(minute);
         alarmToSave.setEnabled(true);
         alarmToSave.setActionType(actionType);
         alarmToSave.setTargetAppsJson(selectedTargetAppsJson);
+        alarmToSave.setRandom(isRandom);
+        alarmToSave.setRandomMinMinutes(minRandom);
+        alarmToSave.setRandomMaxMinutes(maxRandom);
 
         // Cancel existing scheduled alarm if editing
         if (currentAlarm != null) {
@@ -249,7 +300,9 @@ public class AddEditAlarmFragment extends Fragment {
         // Schedule new alarm
         AlarmScheduler.scheduleAlarm(requireContext(), alarmToSave);
 
-        Toast.makeText(requireContext(), "闹钟已保存并启用 (" + alarmToSave.getFormattedTime() + ")", Toast.LENGTH_SHORT).show();
+        String msg = isRandom ? "闹钟已保存并启用 (" + alarmToSave.getFormattedTime() + "，开启每日随机)"
+                              : "闹钟已保存并启用 (" + alarmToSave.getFormattedTime() + ")";
+        Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show();
 
         NavHostFragment.findNavController(AddEditAlarmFragment.this).navigateUp();
     }

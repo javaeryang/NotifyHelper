@@ -19,6 +19,9 @@ import com.fun.notifyhelper.R;
 import com.fun.notifyhelper.model.AlarmAction;
 import com.fun.notifyhelper.storage.AlarmStorage;
 
+import java.util.Calendar;
+import java.util.Random;
+
 public class AlarmReceiver extends BroadcastReceiver {
 
     private static final String TAG = "AlarmReceiver";
@@ -46,8 +49,47 @@ public class AlarmReceiver extends BroadcastReceiver {
         // 2. Launch AlarmAlertActivity directly
         launchAlarmAlertActivity(context, action);
 
-        // 3. Reschedule alarm for NEXT DAY (prevents re-triggering in same minute)
-        AlarmScheduler.scheduleAlarmForNextDay(context, action);
+        // 3. Reschedule alarm for TOMORROW
+        if (action.isRandom()) {
+            // Daily random offset repeat
+            int min = action.getRandomMinMinutes();
+            int max = action.getRandomMaxMinutes();
+            if (min < 0) min = 0;
+            if (max < min) max = min;
+
+            Random random = new Random();
+            int randomOffsetMins = min + random.nextInt(max - min + 1);
+
+            Calendar nextDay = Calendar.getInstance();
+            nextDay.setTimeInMillis(System.currentTimeMillis());
+            nextDay.add(Calendar.DAY_OF_YEAR, 1); // Move to tomorrow
+
+            // Set base time for tomorrow
+            nextDay.set(Calendar.HOUR_OF_DAY, action.getBaseHour());
+            nextDay.set(Calendar.MINUTE, action.getBaseMinute());
+            nextDay.set(Calendar.SECOND, 0);
+            nextDay.set(Calendar.MILLISECOND, 0);
+
+            // Add random offset
+            nextDay.add(Calendar.MINUTE, randomOffsetMins);
+
+            int nextHour = nextDay.get(Calendar.HOUR_OF_DAY);
+            int nextMinute = nextDay.get(Calendar.MINUTE);
+
+            Log.d(TAG, "Daily random offset alarm logic. Base time: " + String.format("%02d:%02d", action.getBaseHour(), action.getBaseMinute())
+                    + ", offset: +" + randomOffsetMins + " mins. Scheduled for tomorrow at: " + String.format("%02d:%02d", nextHour, nextMinute));
+
+            action.setHour(nextHour);
+            action.setMinute(nextMinute);
+            AlarmStorage.getInstance(context).saveAlarm(action);
+            AlarmScheduler.scheduleAlarm(context, action);
+        } else {
+            // Fixed time repeat for next day
+            action.setHour(action.getBaseHour());
+            action.setMinute(action.getBaseMinute());
+            AlarmStorage.getInstance(context).saveAlarm(action);
+            AlarmScheduler.scheduleAlarmForNextDay(context, action);
+        }
     }
 
     private void showNotificationAndRing(Context context, AlarmAction action) {

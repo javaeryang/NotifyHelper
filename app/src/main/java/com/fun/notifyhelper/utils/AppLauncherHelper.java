@@ -45,57 +45,29 @@ public class AppLauncherHelper {
         LauncherApps launcherApps = (LauncherApps) context.getSystemService(Context.LAUNCHER_APPS_SERVICE);
         UserManager userManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
 
-        if (launcherApps == null || userManager == null) {
-            Log.e(TAG, "LauncherApps or UserManager is null, cannot launch apps");
-            return;
-        }
-
         new Thread(() -> {
             for (int i = 0; i < targetApps.size(); i++) {
                 TargetApp targetApp = targetApps.get(i);
                 Log.d(TAG, "Attempting to launch: " + targetApp.getAppName() + " (" + targetApp.getPackageName() + ")");
 
-                boolean launched = false;
-                try {
-                    UserHandle targetUserHandle = null;
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                        List<UserHandle> userProfiles = userManager.getUserProfiles();
-                        for (UserHandle profile : userProfiles) {
-                            if (userManager.getSerialNumberForUser(profile) == targetApp.getUserSerialNumber()) {
-                                targetUserHandle = profile;
-                                break;
-                            }
-                        }
+                // Determine UserHandle and UserId
+                UserHandle targetUserHandle = getUserHandleBySerial(userManager, targetApp.getUserSerialNumber());
+                int userId = getUserIdFromHandle(targetUserHandle);
 
-                        if (targetUserHandle == null) {
-                            Log.w(TAG, "User profile not found for serial: " + targetApp.getUserSerialNumber() + ", falling back to primary");
-                            targetUserHandle = android.os.Process.myUserHandle();
-                        }
-
-                        if (targetApp.getComponentName() != null && !targetApp.getComponentName().isEmpty()) {
-                            ComponentName componentName = ComponentName.unflattenFromString(targetApp.getComponentName());
-                            if (componentName != null) {
-                                try {
-                                    launcherApps.startMainActivity(componentName, targetUserHandle, null, null);
-                                    launched = true;
-                                    Log.d(TAG, "Successfully launched via LauncherApps");
-                                } catch (SecurityException se) {
-                                    Log.w(TAG, "SecurityException: INTERACT_ACROSS_USERS block triggered. Falling back to Advanced Methods.", se);
-                                    launched = launchFallbackAsUser(context, targetApp, targetUserHandle);
-                                }
-                            }
-                        }
+                if (userId > 0 || targetApp.getUserSerialNumber() > 0) {
+                    // Dual App / Secondary User -> Execute ONLY via Root shell command "am start --user <userId>"
+                    int actualUserId = userId > 0 ? userId : 999;
+                    Log.d(TAG, "Dual app detected (User " + actualUserId + "). Executing ONLY Root Shell launch.");
+                    boolean success = launchViaRootShell(targetApp, actualUserId);
+                    if (!success) {
+                        Log.e(TAG, "Root shell launch failed for dual app: " + targetApp.getPackageName());
                     }
-
-                    if (!launched) {
-                        launchFallback(context, targetApp);
-                    }
-                } catch (Exception e) {
-                    Log.e(TAG, "Failed to launch app: " + targetApp.getPackageName(), e);
-                    launchFallback(context, targetApp);
+                } else {
+                    // Primary User (User 0) -> Standard LauncherApps / startActivity
+                    launchPrimaryApp(context, launcherApps, targetApp, targetUserHandle);
                 }
 
-                // If this is not the last app, wait 5 seconds before launching the next one
+                // If not the last app, wait 5 seconds before launching the next one
                 if (i < targetApps.size() - 1) {
                     try {
                         Thread.sleep(5000);
@@ -109,80 +81,70 @@ public class AppLauncherHelper {
         }).start();
     }
 
-    private static boolean launchFallbackAsUser(Context context, TargetApp targetApp, UserHandle userHandle) {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.JELLY_BEAN_MR1) {
-            return false;
+    private static UserHandle getUserHandleBySerial(UserManager userManager, long serialNumber) {
+        if (userManager != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            List<UserHandle> userProfiles = userManager.getUserProfiles();
+            for (UserHandle profile : userProfiles) {
+                if (userManager.getSerialNumberForUser(profile) == serialNumber) {
+                    return profile;
+                }
+            }
         }
-        
-        int userId = -1;
+        return android.os.Process.myUserHandle();
+    }
+
+    private static int getUserIdFromHandle(UserHandle userHandle) {
         if (userHandle != null) {
             try {
                 Method getIdentifierMethod = UserHandle.class.getMethod("getIdentifier");
                 Object result = getIdentifierMethod.invoke(userHandle);
                 if (result != null) {
-                    userId = (int) result;
+                    return (int) result;
                 }
             } catch (Exception ignore) { }
         }
+        return 0;
+    }
 
-        Log.d(TAG, "Extracted actual UserId: " + userId + " from UserHandle (SerialNumber: " + targetApp.getUserSerialNumber() + ")");
-
-        // 终极武器：如果有 Root 权限，直接通过 shell 命令强制拉起
-        if (userId > 0) { // Not the primary user (0)
-            boolean rootSuccess = launchViaRootShell(targetApp, userId);
-            if (rootSuccess) {
-                return true;
+    private static void launchPrimaryApp(Context context, LauncherApps launcherApps, TargetApp targetApp, UserHandle userHandle) {
+        try {
+            if (launcherApps != null && targetApp.getComponentName() != null && !targetApp.getComponentName().isEmpty()) {
+                ComponentName componentName = ComponentName.unflattenFromString(targetApp.getComponentName());
+                if (componentName != null) {
+                    UserHandle handle = userHandle != null ? userHandle : android.os.Process.myUserHandle();
+                    launcherApps.startMainActivity(componentName, handle, null, null);
+                    Log.d(TAG, "Successfully launched primary app via LauncherApps");
+                    return;
+                }
             }
-            Log.w(TAG, "Root shell execution failed or not permitted, trying alternative fallbacks...");
+        } catch (Exception e) {
+            Log.w(TAG, "LauncherApps failed for primary app, trying fallback startActivity", e);
         }
 
-        // 如果没有 Root 或者 Root 失败，尝试前面的隐式跨用户方案
+        // Fallback for primary user
         try {
             Intent launchIntent = context.getPackageManager().getLaunchIntentForPackage(targetApp.getPackageName());
             if (launchIntent != null) {
                 launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                         | Intent.FLAG_ACTIVITY_CLEAR_TOP
                         | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-
-                if (userId == 999 || targetApp.getUserSerialNumber() == 10) {
-                    // For MIUI Dual Apps specifically (XSpace)
-                    Log.d(TAG, "Attempting MIUI XSpace specific intent extra fallback for userId: " + userId);
-                    launchIntent.putExtra("miui.intent.extra.EXPLICIT_SELECTED", true);
-                    launchIntent.putExtra("miui.intent.extra.XSPACE", true);
-
-                    try {
-                        Method putExtraUserMethod = Intent.class.getMethod("putExtra", String.class, int.class);
-                        putExtraUserMethod.invoke(launchIntent, "android.intent.extra.USER_ID", userId);
-                    } catch (Exception e) {
-                        // ignore
-                    }
-
-                    context.startActivity(launchIntent);
-                    Log.d(TAG, "Successfully launched via MIUI XSpace Intent flag");
-                    return true;
-                }
-
-                // Reflection to call startActivityAsUser
-                Method startActivityAsUserMethod = Context.class.getMethod("startActivityAsUser", Intent.class, UserHandle.class);
-                startActivityAsUserMethod.invoke(context, launchIntent, userHandle);
-                Log.d(TAG, "Successfully launched via reflection startActivityAsUser for " + targetApp.getPackageName());
-                return true;
+                context.startActivity(launchIntent);
+                Log.d(TAG, "Successfully launched primary app via startActivity");
             }
         } catch (Exception ex) {
-            Log.e(TAG, "Reflection launchFallbackAsUser failed for: " + targetApp.getPackageName(), ex);
+            Log.e(TAG, "Primary app launch failed for: " + targetApp.getPackageName(), ex);
         }
-        return false;
     }
-    
+
     private static boolean launchViaRootShell(TargetApp targetApp, int userId) {
         String component = targetApp.getComponentName();
         if (component == null || component.isEmpty()) {
-            return false;
+            component = targetApp.getPackageName() + "/.ui.LauncherUI";
         }
-        
-        Log.d(TAG, "Attempting Root Shell launch for User " + userId + " Component: " + component);
+
         String command = "am start -n " + component + " -f 0x10008000 --user " + userId;
-        
+        Log.d(TAG, "Executing Root Shell Command: " + command);
+
         Process process = null;
         DataOutputStream os = null;
         try {
@@ -193,13 +155,13 @@ public class AppLauncherHelper {
             os.flush();
             int exitCode = process.waitFor();
             if (exitCode == 0) {
-                Log.d(TAG, "Root shell launched successfully!");
+                Log.d(TAG, "Root shell command executed successfully for dual app!");
                 return true;
             } else {
-                Log.e(TAG, "Root shell launch failed with exit code: " + exitCode);
+                Log.e(TAG, "Root shell command failed with exit code: " + exitCode);
             }
         } catch (Exception e) {
-            Log.e(TAG, "Failed to execute root shell command", e);
+            Log.e(TAG, "Failed to execute root shell command: " + command, e);
         } finally {
             if (os != null) {
                 try {
@@ -211,20 +173,5 @@ public class AppLauncherHelper {
             }
         }
         return false;
-    }
-
-    private static void launchFallback(Context context, TargetApp targetApp) {
-        try {
-            Intent launchIntent = context.getPackageManager().getLaunchIntentForPackage(targetApp.getPackageName());
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                        | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-                context.startActivity(launchIntent);
-                Log.d(TAG, "Successfully launched via primary fallback (standard startActivity) for " + targetApp.getPackageName());
-            }
-        } catch (Exception ex) {
-            Log.e(TAG, "Final fallback launch failed for: " + targetApp.getPackageName(), ex);
-        }
     }
 }

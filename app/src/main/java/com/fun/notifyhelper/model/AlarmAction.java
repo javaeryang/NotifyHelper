@@ -5,8 +5,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 
 public class AlarmAction implements Serializable {
@@ -18,10 +16,17 @@ public class AlarmAction implements Serializable {
     private String title;
     private int hour;
     private int minute;
+    private int baseHour;
+    private int baseMinute;
     private boolean enabled;
     private int actionType;
     private String targetAppsJson; // JSON array of TargetApp
     private String audioPath;
+    
+    // Fields for random interval repetition
+    private boolean isRandom;
+    private int randomMinMinutes;
+    private int randomMaxMinutes;
 
     public AlarmAction() {
         this.id = System.currentTimeMillis();
@@ -30,6 +35,11 @@ public class AlarmAction implements Serializable {
         this.title = "";
         this.targetAppsJson = "[]";
         this.audioPath = "";
+        this.isRandom = false;
+        this.randomMinMinutes = 5;
+        this.randomMaxMinutes = 30;
+        this.baseHour = 8;
+        this.baseMinute = 0;
     }
 
     public long getId() {
@@ -64,6 +74,22 @@ public class AlarmAction implements Serializable {
         this.minute = minute;
     }
 
+    public int getBaseHour() {
+        return baseHour;
+    }
+
+    public void setBaseHour(int baseHour) {
+        this.baseHour = baseHour;
+    }
+
+    public int getBaseMinute() {
+        return baseMinute;
+    }
+
+    public void setBaseMinute(int baseMinute) {
+        this.baseMinute = baseMinute;
+    }
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -96,12 +122,38 @@ public class AlarmAction implements Serializable {
         this.audioPath = audioPath;
     }
 
+    public boolean isRandom() {
+        return isRandom;
+    }
+
+    public void setRandom(boolean random) {
+        isRandom = random;
+    }
+
+    public int getRandomMinMinutes() {
+        return randomMinMinutes;
+    }
+
+    public void setRandomMinMinutes(int randomMinMinutes) {
+        this.randomMinMinutes = randomMinMinutes;
+    }
+
+    public int getRandomMaxMinutes() {
+        return randomMaxMinutes;
+    }
+
+    public void setRandomMaxMinutes(int randomMaxMinutes) {
+        this.randomMaxMinutes = randomMaxMinutes;
+    }
+
     public String getFormattedTime() {
         return String.format(Locale.getDefault(), "%02d:%02d", hour, minute);
     }
 
     public String getActionDescription() {
+        String baseDesc = "未知动作";
         if (actionType == ACTION_TYPE_OPEN_APP) {
+            baseDesc = "打开应用 (未设定)";
             if (targetAppsJson != null && !targetAppsJson.isEmpty() && !targetAppsJson.equals("[]")) {
                 try {
                     JSONArray array = new JSONArray(targetAppsJson);
@@ -110,20 +162,23 @@ public class AlarmAction implements Serializable {
                         JSONObject firstApp = array.getJSONObject(0);
                         String firstAppName = firstApp.optString("appName", "");
                         if (count == 1) {
-                            return "打开应用: " + firstAppName;
+                            baseDesc = "打开应用: " + firstAppName;
                         } else {
-                            return "打开应用: " + firstAppName + " 等 " + count + " 个应用";
+                            baseDesc = "打开应用: " + firstAppName + " 等 " + count + " 个应用";
                         }
                     }
                 } catch (JSONException e) {
-                    return "打开应用 (格式错误)";
+                    baseDesc = "打开应用 (格式错误)";
                 }
             }
-            return "打开应用 (未设定)";
         } else if (actionType == ACTION_TYPE_PLAY_AUDIO) {
-            return "播放音频/铃声";
+            baseDesc = "播放音频/铃声";
         }
-        return "未知动作";
+        
+        if (isRandom) {
+            baseDesc += " [随机循环: " + randomMinMinutes + "~" + randomMaxMinutes + "分]";
+        }
+        return baseDesc;
     }
 
     public JSONObject toJSONObject() throws JSONException {
@@ -132,10 +187,15 @@ public class AlarmAction implements Serializable {
         json.put("title", title);
         json.put("hour", hour);
         json.put("minute", minute);
+        json.put("baseHour", baseHour);
+        json.put("baseMinute", baseMinute);
         json.put("enabled", enabled);
         json.put("actionType", actionType);
         json.put("targetAppsJson", targetAppsJson);
         json.put("audioPath", audioPath);
+        json.put("isRandom", isRandom);
+        json.put("randomMinMinutes", randomMinMinutes);
+        json.put("randomMaxMinutes", randomMaxMinutes);
         return json;
     }
 
@@ -145,6 +205,8 @@ public class AlarmAction implements Serializable {
         action.setTitle(json.optString("title", ""));
         action.setHour(json.optInt("hour", 8));
         action.setMinute(json.optInt("minute", 0));
+        action.setBaseHour(json.optInt("baseHour", action.getHour()));
+        action.setBaseMinute(json.optInt("baseMinute", action.getMinute()));
         action.setEnabled(json.optBoolean("enabled", true));
         action.setActionType(json.optInt("actionType", ACTION_TYPE_OPEN_APP));
         action.setTargetAppsJson(json.optString("targetAppsJson", "[]"));
@@ -167,6 +229,9 @@ public class AlarmAction implements Serializable {
         }
         
         action.setAudioPath(json.optString("audioPath", ""));
+        action.setRandom(json.optBoolean("isRandom", false));
+        action.setRandomMinMinutes(json.optInt("randomMinMinutes", 5));
+        action.setRandomMaxMinutes(json.optInt("randomMaxMinutes", 30));
         return action;
     }
 }
